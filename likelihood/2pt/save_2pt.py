@@ -288,8 +288,13 @@ def execute(block, config):
             if ngal is not None:
                 for k in kernels:
                     if k.name == kernel_name_a or k.name == kernel_name_b:
-                        if hasattr(k, 'ngal'):
-                            print('warning: overwriting NGAL in kernel {}'.format(k.name))
+                        if hasattr(k, 'ngal') and k.ngal is not None:
+                            try:
+                                same = np.allclose(k.ngal, ngal)
+                            except (ValueError, TypeError):
+                                same = False
+                            if not same:
+                                print('WARNING: confusing NGAL information - written values may be wrong! {}'.format(k.name))
                         k.ngal = ngal
         
         if make_covariance:
