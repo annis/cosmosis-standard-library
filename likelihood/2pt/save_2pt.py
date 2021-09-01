@@ -174,6 +174,12 @@ The input value should be sigma_e_total = sqrt(2) * sigma_e_per_component""")
             config['upsample_cov'] = None
         config['ell_max'] = options.get_int(option_section, "ell_max")
         config['high_l_filter'] = options.get_double(option_section, "high_l_filter", 0.75)
+    else:
+        # Read in number densities if given
+        if options.has_value(option_section, 'number_density_shear_arcmin2'):
+            config['number_density_shear_arcmin2'] = get_arr('number_density_shear_arcmin2')
+        if options.has_value(option_section, 'number_density_lss_arcmin2'):
+            config['number_density_lss_arcmin2'] = get_arr('number_density_lss_arcmin2')
 
     # name of the output file and whether to overwrite it.
     config['filename'] = options.get_string(option_section, "filename")
@@ -270,6 +276,26 @@ def execute(block, config):
         spec_meas_list.append( theory_spec.get_spectrum_measurement( config['angle_mids_userunits'], 
             (kernel_name_a, kernel_name_b), output_extension, angle_lims = config['angle_lims_userunits'], 
             angle_units=angle_units ) )
+
+        # set number density if this is position-position or shear-shear
+        if theory_spec.types[0] == theory_spec.types[1]:
+            if theory_spec.types[0].name.startswith('galaxy_shear'):
+                ngal = config.get('number_density_shear_arcmin2')
+            elif theory_spec.types[0].name.startswith('galaxy_position'):
+                ngal = config.get('number_density_lss_arcmin2')
+            else:
+                ngal = None
+            if ngal is not None:
+                for k in kernels:
+                    if k.name == kernel_name_a or k.name == kernel_name_b:
+                        if hasattr(k, 'ngal') and k.ngal is not None:
+                            try:
+                                same = np.allclose(k.ngal, ngal)
+                            except (ValueError, TypeError):
+                                same = False
+                            if not same:
+                                print('WARNING: confusing NGAL information - written values may be wrong! {}'.format(k.name))
+                        k.ngal = ngal
         
         if make_covariance:
             if real_space:
