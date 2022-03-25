@@ -84,7 +84,8 @@
 
 include ${COSMOSIS_SRC_DIR}/config/compilers.mk
 
-USER_FFLAGS=-I. -ffast-math
+# On perlmutter, the NVC compiler doesn't recognize -fast-math
+USER_FFLAGS=-I. #-ffast-math
 
 FISHER=
 F90C     = $(FC)
