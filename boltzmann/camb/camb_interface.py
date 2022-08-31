@@ -3,6 +3,7 @@ from cosmosis.datablock.cosmosis_py import errors
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline
 import warnings
+import traceback
 
 # Finally we can now import camb
 import camb
@@ -72,6 +73,8 @@ def setup(options):
     more_config = {}
 
     more_config["mode"] = mode
+    more_config["max_printed_errors"] = options.get_int(opt, 'max_printed_errors', default=20)
+    more_config["n_printed_errors"] = 0
     config['WantCls'] = mode in [MODE_CMB, MODE_ALL]
     config['WantTransfer'] = mode in [MODE_POWER, MODE_ALL]
     config['WantScalars'] = True
@@ -138,7 +141,7 @@ def setup(options):
     more_config['zmax_background'] = options.get_double(opt, 'zmax_background', default=more_config['zmax'])
     more_config['nz_background'] = options.get_int(opt, 'nz_background', default=more_config['nz'])
 
-    more_config["transfer_params"] = get_optional_params(options, opt, ["k_per_logint", "accurate_massive_neutrinos"])
+    more_config["transfer_params"] = get_optional_params(options, opt, ["k_per_logint", "accurate_massive_neutrino_transfers"])
     # Adjust CAMB defaults
     more_config["transfer_params"]["kmax"] = options.get_double(opt, "kmax", default=10.0)
     # more_config["transfer_params"]["high_precision"] = options.get_bool(opt, "high_precision", default=True)
@@ -232,8 +235,8 @@ def extract_dark_energy_params(block, config, more_config):
 
     dark_energy = de_class()
     if more_config['use_tabulated_w']:
-        a = block[name.de_equation_of_state, 'a']
-        w = block[name.de_equation_of_state, 'w']
+        a = block[names.de_equation_of_state, 'a']
+        w = block[names.de_equation_of_state, 'w']
         dark_energy.set_w_a_table(a, w)
     else:
         w0 = block.get_double(cosmo, 'w', default=-1.0)
@@ -257,10 +260,15 @@ def extract_initial_power_params(block, config, more_config):
     return init_power
 
 def extract_nonlinear_params(block, config, more_config):
-    if 'mead' in more_config["nonlinear_params"].get('halofit_version', ''):
+    version = more_config["nonlinear_params"].get('halofit_version', '')
+
+    if version == "mead2015" or version == "mead2016" or version == "mead":
         A = block[names.halo_model_parameters, 'A']
         eta0 = block[names.halo_model_parameters, "eta"]
         hmcode_params = {"HMCode_A_baryon": A, "HMCode_eta_baryon":eta0}
+    elif version == "mead2020_feedback":
+        T_AGN = block[names.halo_model_parameters, 'logT_AGN']
+        hmcode_params = {"HMCode_logT_AGN": T_AGN}
     else:
         hmcode_params = {}
 
@@ -561,12 +569,23 @@ def execute(block, config):
     config, more_config = config
     p = extract_camb_params(block, config, more_config)
     
-    if (not p.WantCls) and (not p.WantTransfer):
-        # Background only mode
-        r = camb.get_background(p)
-    else:
-        # other modes
-        r = camb.get_results(p)
+
+    try:
+        if (not p.WantCls) and (not p.WantTransfer):
+            # Background only mode
+            r = camb.get_background(p)
+        else:
+            # other modes
+            r = camb.get_results(p)
+    except camb.CAMBError:
+        if more_config["n_printed_errors"] <= more_config["max_printed_errors"]:
+            print("CAMB error caught: for these parameters")
+            print(p)
+            print(traceback.format_exc())
+            if more_config["n_printed_errors"] == more_config["max_printed_errors"]:
+                print("\nFurther errors will not be printed.")
+            more_config["n_printed_errors"] += 1
+        return 1
 
     save_derived_parameters(r, p, block)
     save_distances(r, p, block, more_config)

@@ -375,7 +375,7 @@ class Spectrum(object):
 
         # Run the main Limber integral
         c_ell, c_ell_err = limber_integral(ell, K1, K2, P_chi_logk_spline, chimin,
-            chimax, dchi)
+            chimax, dchi, interpolation_cache=self.source.interpolation_cache)
 
         # Rescale by the h, Omega_m, etc factor, which depends which spectrum
         # us being computed
@@ -464,7 +464,7 @@ class Spectrum(object):
             dchi_limber = min( K1.sigma/sig_over_dchi, K2.sigma/sig_over_dchi )
 
         c_ell_sublin,_ = limber_integral(ell, K1, K2, P_sublin_spline,
-            chimin, chimax, dchi_limber)
+            chimin, chimax, dchi_limber, interpolation_cache=self.source.interpolation_cache)
 
         # Add the Limber on the non-linear part to the total
         c_ell += c_ell_sublin
@@ -613,7 +613,7 @@ class LingalLingalSpectrum(Spectrum):
             dchi_limber = min( K1.sigma/sig_over_dchi, K2.sigma/sig_over_dchi )
 
         c_ell_sublin,_ = limber_integral(ell, K1, K2, P_sublin_spline, chimin,
-            chimax, dchi_limber)
+            chimax, dchi_limber, interpolation_cache=self.source.interpolation_cache)
 
         # We apply the linear bias here to the NL-only (sublin) part.  The
         # linear bias is already applied in the exact_integral above to the
@@ -1166,7 +1166,7 @@ class SpectrumCalculator(object):
         self.verbose = options.get_bool(option_section, "verbose", False)
         self.fatal_errors = options.get_bool(option_section, "fatal_errors", False)
         self.get_kernel_peaks = options.get_bool(option_section, "get_kernel_peaks", False)
-        self.save_kernel_zmax = options.get_double(option_section, "save_kernel_zmax", -1.0)
+        self.save_kernels = options.get_bool(option_section, "save_kernels", False)
 
         self.limber_ell_start = options.get_int(option_section, "limber_ell_start", 300)
         do_exact_string = options.get_string(option_section, "do_exact", "")
@@ -1502,6 +1502,11 @@ class SpectrumCalculator(object):
             else:
                 raise ValueError(f"Invalid kernel type: {kernel_type}. Should be 'N' or 'W'")
 
+    def save_kernels_to_block(self, block):
+        for name, kernel in self.kernels.items():
+            section = f"kernels_{name}"
+            kernel.to_block(block, section)
+
     def load_power(self, block):
         # Loop through keys in self.req_power_keys, initializing the Power3d
         # instances and adding to the self.power dictionary.
@@ -1587,6 +1592,8 @@ class SpectrumCalculator(object):
         self.outputs.clear()
         self.lensing_prefactor = None
 
+        self.interpolation_cache.clear()
+
     def execute(self, block):
         """
         Execute the pipeline step by loading the relevant data from the block
@@ -1594,6 +1601,7 @@ class SpectrumCalculator(object):
         """
         try:
             # Load input information from the block
+            self.interpolation_cache = {}
             self.load_distance_splines(block)
             self.load_lensing_prefactor(block)
             self.load_lensing_weyl_prefactor(block)
@@ -1625,8 +1633,8 @@ class SpectrumCalculator(object):
             # We can optionally save the kernels that go into the
             # integration as well.  This is useful for e.g. plotting
             # things.  Thi
-            if self.save_kernel_zmax > 0:
-                self.save_kernels(block, self.save_kernel_zmax)
+            if self.save_kernels:
+                self.save_kernels_to_block(block)
 
             # Load the P(k)s
             t0 = timer()
