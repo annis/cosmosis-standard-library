@@ -166,10 +166,31 @@ def setup(options):
         raise ValueError("""These matter power types are not known: {}.
 Please use any these (separated by spaces): {}""".format(bad_power, good_power))
 
+    # sigma(r) work
+    r_vec = set_vector(options, "sigmar_rmin", "sigmar_rmax", "sigmar_dr", "sigmar_r")
+    more_config["sigma_r_vec"] = r_vec
+
     camb.set_feedback_level(level=options.get_int(opt, "feedback", default=0))
     return [config, more_config]
 
+# sigma(r) work helper function
+def set_vector(options, vmin, vmax, dv, vec):
+    """Read a vector-valued parameter from the parameter file either directly or via min,max,n"""
 
+    if options.has_value(opt, vec):
+        return np.array(options[opt, vec])
+    else:
+        xmin = options[opt, vmin]
+        xmax = options[opt, vmax]
+        dx = options[opt, dv]
+
+        return np.arange(xmin, xmax, dx)
+
+# sigma(r) work 
+def save_sigmaR(r, p, block, more_config):
+    r_vec = more_config["sigma_r_vec"]
+    R, z, sigma_r = r.get_sigmaR(R=r_vec, return_R_z=True)
+    block.put_grid("sigma_r", "z", z, "r", R, "sigma", sigma_r)
 
 # The extract functions convert from the block to camb parameters
 # during the execute function
@@ -661,6 +682,7 @@ def execute(block, config):
 
     save_derived_parameters(r, p, block)
     save_distances(r, p, block, more_config)
+    save_sigmaR(r, p, block, more_config)
 
     if p.WantTransfer:
         save_matter_power(r, p, block, more_config)
