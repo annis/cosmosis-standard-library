@@ -166,15 +166,15 @@ def setup(options):
         raise ValueError("""These matter power types are not known: {}.
 Please use any these (separated by spaces): {}""".format(bad_power, good_power))
 
-    # sigma(r) work
-    r_vec = set_vector(options, "sigmar_rmin", "sigmar_rmax", "sigmar_dr", "sigmar_r")
+    # sigma(r) JTA+CZ
+    r_vec = vector_fron_config(options, "sigmar_rmin", "sigmar_rmax", "sigmar_dr", "sigmar_r")
     more_config["sigma_r_vec"] = r_vec
 
     camb.set_feedback_level(level=options.get_int(opt, "feedback", default=0))
     return [config, more_config]
 
-# sigma(r) work helper function
-def set_vector(options, vmin, vmax, dv, vec):
+# sigma(r) JTA+CZ
+def vector_from_config(options, vmin, vmax, dv, vec):
     """Read a vector-valued parameter from the parameter file either directly or via min,max,n"""
 
     if options.has_value(opt, vec):
@@ -186,7 +186,13 @@ def set_vector(options, vmin, vmax, dv, vec):
 
         return np.arange(xmin, xmax, dx)
 
-# sigma(r) work 
+# sigma(r) JTA+CZ
+#
+# r.get_sigmaR without optional arguments var1,var2 always uses the 
+# linear matter power spectrum, delta_tot in the language of 
+# https://camb.readthedocs.io/en/latest/transfer_variables.html#transfer-variables,
+# regardless of the camb module configuration parameter "power_spectra"
+#
 def save_sigmaR(r, p, block, more_config):
     r_vec = more_config["sigma_r_vec"]
     R, z, sigma_r = r.get_sigmaR(R=r_vec, return_R_z=True)
